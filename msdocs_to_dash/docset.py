@@ -1,7 +1,8 @@
 #!env python3
 
 from dataclasses import dataclass
-
+import logging
+from urllib.parse import urljoin
 
 @dataclass
 class DocSource:
@@ -12,21 +13,24 @@ class DocSource:
     domain: str = "learn.microsoft.com"
 
     def __post_init__(self):
-        if self.base_uri.starts_with('/'):
+        if self.base_uri.startswith('/'):
             self.base_uri = self.base_uri[1:]
-        if self.base_uri.ends_with('/'):
+        if self.base_uri.endswith('/'):
             self.base_uri = self.base_uri[:-1]
         
-        if self.theme_uri.starts_with('/'):
+        if self.theme_uri.startswith('/'):
             self.theme_uri = self.theme_uri[1:]
         
-        if not self.toc_uri.starts_with('/'):
+        if not self.toc_uri.startswith('/'):
             self.toc_uri = f"{self.base_uri}/{self.toc_uri}"
+        
+    def get_base_uri(self):
+        return f"https://{self.domain}/{self.base_uri}"
     
-    def toc_uri(self):
+    def get_toc_uri(self):
         return f"https://{self.domain}/{self.toc_uri}"
     
-    def theme_uri(self):
+    def get_theme_uri(self):
         return f"https://{self.domain}/{self.theme_uri}"
 
 @dataclass
@@ -37,4 +41,4 @@ class DocSet:
     def __post_init__(self):
         if isinstance(self.sources, DocSource):
             self.sources = [self.sources]
-        
+    

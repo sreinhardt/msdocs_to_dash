@@ -3,7 +3,10 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+import logging
+import os
 import requests
+import time
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from requests.exceptions import ConnectionError
@@ -19,6 +22,7 @@ class WebDriver:
     session: 'Session' = field(init=False, repr=False)
 
     def __post_init__(self):
+        logging.debug("Initalizing WebDriver")
         self.options = Options()
         self.options.add_argument("--headless")
         self.options.add_argument("--window-size=1920x1080")   
@@ -28,11 +32,12 @@ class WebDriver:
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
     def quit():
+        logging.debug("Closing WebDriver")
         return self.driver.quit()
 
     def get_url_page(self, url):
         """ retrieve the full html content of a page after Javascript execution """
-        
+        logging.debug(f"Chrome request for \"{url}\"")
         index_html = None
         try:
             self.driver.get(url)
@@ -49,8 +54,10 @@ class WebDriver:
 
         return index_html
 
-    def get_binary(self, url, output):
-        os.makedirs(os.path.dirname(output_filename), exist_ok = True)
+    def get_binary(self, url, output=None):
+        logging.debug(f"Binary request for \"{url}\"")
+        if output:
+            os.makedirs(os.path.dirname(output), exist_ok = True)
         r = None
         while True:
             try:
@@ -60,21 +67,27 @@ class WebDriver:
                 time.sleep(2)
             else:
                 break
-        
-        with open(output_filename, 'wb') as f:
-            for data in r.iter_content(32*1024):
-                f.write(data)
+        if output:
+            with open(output, 'wb') as f:
+                for data in r.iter_content(32*1024):
+                    f.write(data)
+            return None
+        return r.content
     
-    def get_text(self, url, output):
-        os.makedirs(os.path.dirname(output_filename), exist_ok = True)
+    def get_text(self, url, output=None, params=None):
+        logging.debug(f"Text request for \"{url}\"")
+        if output:
+            os.makedirs(os.path.dirname(output), exist_ok = True)
         while True:
             try:
-                r = session.get(url, data = params)
+                r = self.session.get(url, data = params)
             except ConnectionError:
                 logging.debug("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break
-    
-        with open(output_filename, 'w', encoding="utf8") as f:
-            f.write(r.text)
+        if output:
+            with open(output, 'w', encoding="utf8") as f:
+                f.write(r.text)
+            return None
+        return r.text

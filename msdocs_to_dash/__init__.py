@@ -3,3 +3,4 @@
 from . import webdriver
 from . import toc
 from . import docset
+from . import downloader
