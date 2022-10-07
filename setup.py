@@ -9,7 +9,7 @@ setup(
     url="https://github.com/sreinhardt/msdocs_to_dash",
     author="Spenser Reinhardt",
     author_email="none@none.none",
-    packages=find_packages(),
+    packages=find_packages(exclude=["test", "extra"]),
     include_package_data=True,
     install_requires=[ "requests", "selenium", "bs4"]
 )

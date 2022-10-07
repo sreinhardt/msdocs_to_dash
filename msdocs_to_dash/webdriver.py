@@ -7,6 +7,7 @@ import logging
 import os
 import requests
 import time
+import urllib
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from requests.exceptions import ConnectionError
@@ -22,7 +23,7 @@ class WebDriver:
     session: 'Session' = field(init=False, repr=False)
 
     def __post_init__(self):
-        logging.debug("Initalizing WebDriver")
+        logging.info("Initalizing WebDriver")
         self.options = Options()
         self.options.add_argument("--headless")
         self.options.add_argument("--window-size=1920x1080")   
@@ -32,12 +33,12 @@ class WebDriver:
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
     def quit():
-        logging.debug("Closing WebDriver")
+        logging.info("Closing WebDriver")
         return self.driver.quit()
 
     def get_url_page(self, url):
         """ retrieve the full html content of a page after Javascript execution """
-        logging.debug(f"Chrome request for \"{url}\"")
+        logging.info(f"Chrome request for \"{url}\"")
         index_html = None
         try:
             self.driver.get(url)
@@ -55,7 +56,7 @@ class WebDriver:
         return index_html
 
     def get_binary(self, url, output=None):
-        logging.debug(f"Binary request for \"{url}\"")
+        logging.info(f"Binary request for \"{url}\"")
         if output:
             os.makedirs(os.path.dirname(output), exist_ok = True)
         r = None
@@ -63,7 +64,7 @@ class WebDriver:
             try:
                 r = self.session.get(url, stream=True)
             except ConnectionError:
-                logging.debug("caught ConnectionError, retrying...")
+                logging.info("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break
@@ -75,14 +76,14 @@ class WebDriver:
         return r.content
     
     def get_text(self, url, output=None, params=None):
-        logging.debug(f"Text request for \"{url}\"")
+        logging.info(f"Text request for \"{url}\"")
         if output:
             os.makedirs(os.path.dirname(output), exist_ok = True)
         while True:
             try:
                 r = self.session.get(url, data = params)
             except ConnectionError:
-                logging.debug("caught ConnectionError, retrying...")
+                logging.info("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break
