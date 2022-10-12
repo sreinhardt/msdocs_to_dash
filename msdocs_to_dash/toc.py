@@ -10,12 +10,14 @@ from pathlib import Path
 from bs4 import BeautifulSoup as bs, Tag
 
 from msdocs_to_dash.sqlite import SqLiteDb, Type
+from msdocs_to_dash.tar import tar_write_str, tar_write_bytes
 
 @dataclass
 class Child:
     parent: Union["Toc", "Branch"] = field(repr=False)
     toc_title: str
     href: Optional[str] = field(default="") # dirs must end in /
+    contents: Optional[str] = field(default="", init=False, repr=False)
     
     def __post_init__(self):
         if not self.href:
@@ -24,13 +26,16 @@ class Child:
     # call up to parent values
     def base_uri(self):
         return self.parent.base_uri()
-    #def base_path(self):
-    #    return self.parent.base_path()
+    def add_css_uri(self, uri):
+        self.parent.add_css_uri(uri)
+    def add_js_uri(self, uri):
+        self.parent.add_js_uri(uri)
     def domain(self):
         return self.parent.domain()
     def get_base_url(self):
         return self.parent.get_base_url()
-
+    def get_theme_url(self, url=""):
+        return self.parent.get_theme_url(url)
     @staticmethod
     def _reduce_(root, path):
         # given root: windows/win32/api and path: /windows/win32/api/adsprop/ -> adsprop/
@@ -99,7 +104,7 @@ class Child:
             raise ValueError(f"json text cannot be Child node", text)
         return Child(parent, title, href)
     
-    def get_contents(self, webdriver, output) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
+    def get_contents(self, webdriver, input) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
         '''
         Downloads text contents of this child node.
         Appends href to url and output paths for download and storage.
@@ -109,22 +114,25 @@ class Child:
         '''
         logging.info(f"Downloading child \"{self.toc_title}\"")
         tocs = set() # just paths to get future tocs from
-        if self.has_contents(output):
+        if self.has_contents(input):
             logging.info("  Using previously downloaded files")
+            if not self.contents:
+                self.read(input)
         else:
-            folder = self.folder(output)
-            os.makedirs(folder, exist_ok=True)
-            webdriver.get_text(self.url(), self.file(output))
+            self.contents = webdriver.get_text(self.url())
+        self.rewrite_html() # always rewrite, wont harm previously done files
         if not self.isfile():
-            toc = self.folder(self.base_uri())
-            tocs.add(toc)
+            tocs.add( self.folder(self.base_uri()) )
         return list(map(lambda t: (t, self), tocs)) # [(toc, self), ...]
     
     def has_contents(self, output):
-        folder = self.folder(output)
-        return os.path.exists(folder) and os.path.exists(self.file(output))
+        if self.contents:
+            return True
+        return os.path.exists(self.folder(output)) and os.path.exists(self.file(output))
 
-    def rewrite_html(self, base_uri, output, content=None):
+    def rewrite_html(self):
+        if not self.contents:
+            raise RuntimeError("Cannot rewrite html without contents", self)
         logging.info(f"Rewriting html for \"{self.toc_title}\"")
         def remove_elements(soup):
             # remove link to external references since we can't support it
@@ -142,9 +150,13 @@ class Child:
                 ["div"  , { "class" : "container footerContainer"}],
                 ["div"  , { "class" : "dropdown-container"}],
                 ["div"  , { "class" : "page-action-holder"}],
+                ["div"  , { "class" : "header-holder"}],
+                ["div"  , { "id"    : "article-header"}],
+                ["div"  , { "id"    : "user-feedback"}],
                 ["div"  , { "aria-label" : "Breadcrumb", "role" : "navigation"}],
                 ["div"  , { "data-bi-name" : "rating"}],
                 ["div"  , { "data-bi-name" : "feedback-section"}],
+                ["ul"   , { "class":"links", "data-bi-name":"footerlinks"}],
                 ["section" , { "class" : "feedback-section", "data-bi-name" : "feedback-section"}],
                 ["footer" , { "data-bi-name" : "footer", "id" : "footer"}],
             ]
@@ -153,37 +165,59 @@ class Child:
                 
                 for nav_tag in soup.findAll(nav_class, nav_attr):
                     _ = nav_tag.extract()
-            # remove script elems
-            for head_script in soup.head.findAll("script"):
+            for head_script in soup.head.findAll("script",{"src":True}):
+                if head_script["src"].startswith('http'):
+                    # only want to remove externals
                     _ = head_script.extract()
             return soup
         def fix_relative_links(soup):
             for link in soup.findAll("a", { "data-linktype" : "relative-path"}):
                 href = link["href"]
-                fixed = href
-
-        folder = self.folder(output)
-        if not content:
-            with open(self.file(folder), 'r', encoding='utf8') as f:
-                content = f.read()
+                if href.endswith("/"): # is dir point to index
+                    href = f"{href}index.html"
+                else: # is file, just add html
+                    href = f"{href}.html"
+                if href != link["href"]:
+                    link["href"] = href
+            return soup
+        def find_extra_files(soup):
+            for link in soup.findAll('a',{'rel': 'stylesheet'}):
+                self.add_css_uri(f"{self.get_theme_url(link['href'])}")
+                link['href'] = f"/_themes_/{os.path.basename(link['href'])}"
+            for link in soup.findAll('script',{"src":True}):
+                self.add_js_uri(f"{self.get_theme_url(link['src'])}")
+                link['href'] = f"/_themes_/{os.path.basename(link['src'])}"
+            return soup
         
-        soup = bs(content, 'html.parser')
+        soup = bs(self.contents, 'html.parser')
         soup = remove_elements(soup)
-
-        content = soup.prettify("utf-8")
-        with open(self.file(folder), 'wb') as f:
-            f.write(content)
-        
-        return content
+        soup = fix_relative_links(soup)
+        soup = find_extra_files(soup)
+        self.contents = soup.prettify("utf-8")
 
     def dash_type(self):
         dtype = Type.from_str(self.toc_title)
         if not dtype:
             return self.parent.dash_type()
 
-    def db_insert(self, db, dir=""):
+    def db_insert(self, db):
         rec_type = self.dash_type()
-        db.insert(self.toc_title, rec_type, self.file(dir))
+        db.insert(self.toc_title, rec_type, self.file())
+
+    def write(self, output):
+        if not self.contents:
+            raise RuntimeError("Cannot write contents without them")
+        os.mkdirs(self.folder(output), exist_ok=True)
+        with open(self.file(output), 'w', encoding="utf8") as f:
+                f.write(self.contents)
+    
+    def read(self, input):
+        with open(self.file(input), encoding="utf8") as f:
+            self.contents = f.read()
+
+    def write_tar(self, tar):
+        doc_path = Path("Contents/Resources/Documents")
+        tar_write_str(tar, doc_path.join_path(self.file()), self.contents)
 
 @dataclass
 class Branch(Child):
@@ -207,7 +241,7 @@ class Branch(Child):
                 branch.children.append(child)
         return branch
     
-    def get_contents(self, webdriver, output) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
+    def get_contents(self, webdriver, input) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
         '''
         Download text contents for self if href is available as a child
         and download children to output/toc_title
@@ -216,13 +250,9 @@ class Branch(Child):
         logging.info(f"Downloading branch \"{self.toc_title}\"")
         if self.href:
             # download branches with href like children by using tocs
-            toc = self.folder(self.base_uri())
-            if toc:
-                sub_tocs.append((toc, self))
+            sub_tocs.append(self.folder(self.base_uri()))
         # add href pathing, and get children to it
-        folder = self.folder(output)
-        os.makedirs(folder, exist_ok=True)
-        sub_tocs.extend(__get_contents__(self.children, webdriver, output))
+        sub_tocs.extend(__get_contents__(self.children, webdriver, input))
         return sub_tocs
     
     def has_contents(self, output):
@@ -241,11 +271,33 @@ class Branch(Child):
             return None
         return super().toc(domain)
 
-    def db_insert(self, db, dir=""):
+    def db_insert(self, db):
         rec_type = self.dash_type()
-        db.insert(self.toc_title, rec_type, self.file(dir))
+        # isfile?
+        db.insert(self.toc_title, rec_type, self.file())
         for child in self.children:
-            chld.db_insert(db, dir)
+            chld.db_insert(db)
+
+    def write(self, output):
+        if self.contents:
+            super().write(output)
+        os.mkdirs(self.folder(output), exist_ok=True)
+        for child in self.children:
+            child.write(output)
+    
+    def read(self, input):
+        if self.isfile():
+            super().read(input)
+        idx = 0
+        while idx < len(self.children):
+            self.children[idx].read(input)
+            idx += 1
+
+    def write_tar(self, tar):
+        if self.isfile():
+            super().write_tar(tar)
+        for child in self.children:
+            child.write_tar(tar)
 
 @dataclass
 class Metadata:
@@ -291,26 +343,31 @@ class Toc:
                     toc.items.append(Child.from_json(item, toc))
         return toc
     
-    def get_contents(self, webdriver, output) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
-        logging.info(f"Downloading toc to {output}")
+    def get_contents(self, webdriver, input) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
+        logging.info(f"Downloading toc {self.metadata.title}")
         sub_tocs = list()
-        os.makedirs(output, exist_ok=True)
-        sub_tocs = __get_contents__(self.items, webdriver, output)
-        logging.info(f"Completed toc download for {output}")
+        sub_tocs = __get_contents__(self.items, webdriver, input)
+        logging.info(f"Completed toc download for {self.metadata.title}")
         return sub_tocs
     
     def has_contents(self, output):
-        if not os.path.exists(output):
-            return False
         for item in self.items:
             if not item.has_contents(output):
                 return False
         return True
 
+    def write_contents(self, output):
+        for item in self.items:
+            item.write(output)
+
     def db_insert(self, db):
         for item in self.items:
             # should this be nothing, having sqlite inside of base_path and relative internally?
-            item.db_insert(db, self.parent.base_path())
+            item.db_insert(db)
+
+    def write_tar(self, tar):
+        for item in self.items:
+            item.write_tar(tar)
 
     # terminate parent calls
     def folder(self, dir):
@@ -338,13 +395,18 @@ class Toc:
         if self.parent:
             return self.parent.get_base_url()
         raise RuntimeError("No docsource to request base url from")
+    def get_theme_url(self, url=""):
+        return self.parent.get_theme_url(url)
+    def add_css_uri(self, uri):
+        self.parent.add_css_uri(uri)
+    def add_js_uri(self, uri):
+        self.parent.add_js_uri(uri)
 
-
-def __get_contents__(items, webdriver, output):
+def __get_contents__(items, webdriver, input):
     sub_tocs = list()
     toc_paths = set()
     for item in items:
-        tocs = item.get_contents(webdriver, output)
+        tocs = item.get_contents(webdriver, input)
         for toc in tocs:
             if toc[0] not in toc_paths:
                 sub_tocs.append(toc)

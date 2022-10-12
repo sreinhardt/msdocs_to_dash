@@ -55,30 +55,21 @@ class WebDriver:
 
         return index_html
 
-    def get_binary(self, url, output=None):
+    def get_binary(self, url, output=None) -> bytes:
         logging.info(f"Binary request for \"{url}\"")
-        if output:
-            os.makedirs(os.path.dirname(output), exist_ok = True)
         r = None
         while True:
             try:
-                r = self.session.get(url, stream=True)
+                r = self.session.get(url)
             except ConnectionError:
                 logging.info("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break
-        if output:
-            with open(output, 'wb') as f:
-                for data in r.iter_content(32*1024):
-                    f.write(data)
-            return None
         return r.content
     
-    def get_text(self, url, output=None, params=None):
+    def get_text(self, url, params=None) -> str:
         logging.info(f"Text request for \"{url}\"")
-        if output:
-            os.makedirs(os.path.dirname(output), exist_ok = True)
         while True:
             try:
                 r = self.session.get(url, data = params)
@@ -87,8 +78,4 @@ class WebDriver:
                 time.sleep(2)
             else:
                 break
-        if output:
-            with open(output, 'w', encoding="utf8") as f:
-                f.write(r.text)
-            return None
         return r.text

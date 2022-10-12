@@ -1,6 +1,7 @@
 #!env python3
 
 from . import webdriver
+from . import tar
 from . import sqlite
 from . import toc
 from . import docset

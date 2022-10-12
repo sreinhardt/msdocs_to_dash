@@ -31,6 +31,5 @@ def test_docsource(docsource):
 
 def test_docset(docset, docsource):
     assert docset.title == "Windows Desktop Api"
-    assert docset.folder == "Win32k"
+    assert docset.identifier == "Win32k"
     assert docset.sources == [ docsource ]
-    assert docset.get_folder() == "Win32k"
