@@ -63,6 +63,9 @@ class DocSource:
         idx = 0
         while idx < len(todo_tocs): # (toc_uri, parent)
             toc = todo_tocs[idx]
+            if not isinstance(toc, tuple):
+                idx += 1
+                continue
             toc_json = ""
             if toc[0].strip("/") == base_toc.base_uri():
                 idx += 1
@@ -81,7 +84,7 @@ class DocSource:
         for toc in self._tocs:
             toc.write(output)
     
-    def get_themes(self, webdriver, output):
+    def get_themes(self, webdriver):
         css_files = list()
         for css in self._css_files:
             fname = os.path.basename(css)
@@ -219,7 +222,7 @@ class DocSet:
             js_files.append(fname, js)
         self._js_files = js_files
         for source in self.sources:
-            source.get_themes(webdriver, output)
+            source.get_themes(webdriver)
     
     def add_css_uri(self, uri):
         uri = uri.strip()

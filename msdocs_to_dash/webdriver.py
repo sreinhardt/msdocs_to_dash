@@ -38,7 +38,7 @@ class WebDriver:
 
     def get_url_page(self, url):
         """ retrieve the full html content of a page after Javascript execution """
-        logging.info(f"Chrome request for \"{url}\"")
+        logging.debug(f"Chrome request for \"{url}\"")
         index_html = None
         try:
             self.driver.get(url)
@@ -56,25 +56,25 @@ class WebDriver:
         return index_html
 
     def get_binary(self, url, output=None) -> bytes:
-        logging.info(f"Binary request for \"{url}\"")
+        logging.debug(f"Binary request for \"{url}\"")
         r = None
         while True:
             try:
                 r = self.session.get(url)
             except ConnectionError:
-                logging.info("caught ConnectionError, retrying...")
+                logging.error("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break
         return r.content
     
     def get_text(self, url, params=None) -> str:
-        logging.info(f"Text request for \"{url}\"")
+        logging.debug(f"Text request for \"{url}\"")
         while True:
             try:
                 r = self.session.get(url, data = params)
             except ConnectionError:
-                logging.info("caught ConnectionError, retrying...")
+                logging.error("caught ConnectionError, retrying...")
                 time.sleep(2)
             else:
                 break

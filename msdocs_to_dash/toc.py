@@ -99,7 +99,7 @@ class Child:
         href = text.get("href")
         if not href:
             href = ""
-        logging.info(f"Creating child for \"{title}\" to {href}")
+        logging.debug(f"Creating child for \"{title}\" to {href}")
         if not title:
             raise ValueError(f"json text cannot be Child node", text)
         return Child(parent, title, href)
@@ -112,13 +112,15 @@ class Child:
         url+href -> output+href+toc_title.html
         returns: toc url, parent
         '''
-        logging.info(f"Downloading child \"{self.toc_title}\"")
+        logging.info(f"Accessing child \"{self.toc_title}\"")
         tocs = set() # just paths to get future tocs from
         if self.has_contents(input):
-            logging.info("  Using previously downloaded files")
+            logging.debug("  Using previously downloaded files")
             if not self.contents:
                 self.read(input)
         else:
+            logging.debug("  Downloading new file")
+            breakpoint()
             self.contents = webdriver.get_text(self.url())
         self.rewrite_html() # always rewrite, wont harm previously done files
         if not self.isfile():
@@ -133,7 +135,6 @@ class Child:
     def rewrite_html(self):
         if not self.contents:
             raise RuntimeError("Cannot rewrite html without contents", self)
-        logging.info(f"Rewriting html for \"{self.toc_title}\"")
         def remove_elements(soup):
             # remove link to external references since we can't support it
             for abs_href in soup.findAll("a", { "data-linktype" : "absolute-path"}):
@@ -228,7 +229,7 @@ class Branch(Child):
     
     @staticmethod
     def from_json(text, parent):
-        logging.info(f"Creating branch for \"{text.get('toc_title')}\"")
+        logging.debug(f"Creating branch for \"{text.get('toc_title')}\"")
         branch = Branch(parent, text.get("toc_title"), text.get("href"), [])
         
         if "children" in text:
@@ -256,14 +257,15 @@ class Branch(Child):
         return sub_tocs
     
     def has_contents(self, output):
-        folder = self.folder(output)
         if self.href:
-            if not os.path.exists(folder) or \
-            not os.path.exists(self.file(folder)):
+            if not os.path.exists(self.folder(output)) or \
+            not os.path.exists(self.file(fooutputlder)):
+                breakpoint()
                 return False
         for child in self.children:
-            if not child.has_contents(folder):
+            if not child.has_contents(output):
                 return False
+                breakpoint()
         return True
     
     def toc(self, domain=""):
