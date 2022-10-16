@@ -22,7 +22,7 @@ class SqLiteDb():
     @staticmethod
     def new(path):
         if os.path.exists(path):
-            os.path.remove(path)
+            os.remove(path)
         db = SqLiteDb(path)
         db.cur.execute('CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);')
         db.cur.execute('CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);')
@@ -37,6 +37,12 @@ class SqLiteDb():
         self.db.close()
     
     def insert(self, name, rec_type, path):
+        if not isinstance(name, str):
+            name = str(name)
+        if not isinstance(rec_type, str):
+            rec_type = str(rec_type)
+        if not isinstance(path, str):
+            path = str(path)
         # was try/excepted without catching anything
         self.cur.execute('SELECT rowid FROM searchIndex WHERE path = ?', (path,))
         dbpath = self.cur.fetchone()

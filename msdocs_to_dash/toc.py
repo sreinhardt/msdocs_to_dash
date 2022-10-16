@@ -120,7 +120,6 @@ class Child:
                 self.read(input)
         else:
             logging.debug("  Downloading new file")
-            breakpoint()
             self.contents = webdriver.get_text(self.url())
         self.rewrite_html() # always rewrite, wont harm previously done files
         if not self.isfile():
@@ -166,10 +165,11 @@ class Child:
                 
                 for nav_tag in soup.findAll(nav_class, nav_attr):
                     _ = nav_tag.extract()
-            for head_script in soup.head.findAll("script",{"src":True}):
-                if head_script["src"].startswith('http'):
-                    # only want to remove externals
-                    _ = head_script.extract()
+            if soup.head:
+                for head_script in soup.head.findAll("script",{"src":True}):
+                    if head_script["src"].startswith('http'):
+                        # only want to remove externals
+                        _ = head_script.extract()
             return soup
         def fix_relative_links(soup):
             for link in soup.findAll("a", { "data-linktype" : "relative-path"}):
@@ -208,8 +208,8 @@ class Child:
     def write(self, output):
         if not self.contents:
             raise RuntimeError("Cannot write contents without them")
-        os.mkdirs(self.folder(output), exist_ok=True)
-        with open(self.file(output), 'w', encoding="utf8") as f:
+        os.makedirs(self.folder(output), exist_ok=True)
+        with open(self.file(output), 'wb') as f:
                 f.write(self.contents)
     
     def read(self, input):
@@ -218,7 +218,10 @@ class Child:
 
     def write_tar(self, tar):
         doc_path = Path("Contents/Resources/Documents")
-        tar_write_str(tar, doc_path.join_path(self.file()), self.contents)
+        if isinstance(self.contents, bytes):
+            tar_write_bytes(tar, doc_path.joinpath(self.file()), self.contents)
+        else:
+            tar_write_str(tar, doc_path.joinpath(self.file()), self.contents)
 
 @dataclass
 class Branch(Child):
@@ -249,9 +252,9 @@ class Branch(Child):
         '''
         sub_tocs = list()
         logging.info(f"Downloading branch \"{self.toc_title}\"")
-        if self.href:
+        if self.href and self.href not in [".", "./", "../"]:
             # download branches with href like children by using tocs
-            sub_tocs.append(self.folder(self.base_uri()))
+            sub_tocs.append((self.folder(self.base_uri()), self))
         # add href pathing, and get children to it
         sub_tocs.extend(__get_contents__(self.children, webdriver, input))
         return sub_tocs
@@ -260,12 +263,10 @@ class Branch(Child):
         if self.href:
             if not os.path.exists(self.folder(output)) or \
             not os.path.exists(self.file(fooutputlder)):
-                breakpoint()
                 return False
         for child in self.children:
             if not child.has_contents(output):
                 return False
-                breakpoint()
         return True
     
     def toc(self, domain=""):
@@ -278,12 +279,12 @@ class Branch(Child):
         # isfile?
         db.insert(self.toc_title, rec_type, self.file())
         for child in self.children:
-            chld.db_insert(db)
+            child.db_insert(db)
 
     def write(self, output):
         if self.contents:
             super().write(output)
-        os.mkdirs(self.folder(output), exist_ok=True)
+        os.makedirs(self.folder(output), exist_ok=True)
         for child in self.children:
             child.write(output)
     
@@ -325,6 +326,7 @@ class Metadata:
 class Toc:
     items: List[Union['Branch', 'Child']]
     metadata: Optional['Metadata']
+    contents: Optional[bytes] = field(default=b'', repr=False, init=False)
     parent: Optional[Union['DocSource', 'Toc']] = field(default=None, repr=False)
     
     @staticmethod
@@ -345,6 +347,27 @@ class Toc:
                     toc.items.append(Child.from_json(item, toc))
         return toc
     
+    def get_index(self, title, webdriver, input):
+        # call on root tocs to get base_uri -> index.html
+        child = Child(self, title, './')
+        child.get_contents(webdriver, input)
+        self.contents = child.contents
+    
+    def write_index(self, output):
+        if not self.contents:
+            raise RuntimeError("Cannot write contents without them")
+        fname = Path(output).joinpath("index.html")
+        os.makedirs(output, exist_ok=True)
+        with open(fname, 'wb') as f:
+                f.write(self.contents)
+    
+    def write_index_tar(self, tar):
+        index = Path("Contents/Resources/Documents/index.html")
+        if isinstance(self.contents, bytes):
+            tar_write_bytes(tar, index, self.contents)
+        else:
+            tar_write_str(tar, index, self.contents)
+
     def get_contents(self, webdriver, input) -> List[Tuple[str, Union['Toc','Branch','Child']]]:
         logging.info(f"Downloading toc {self.metadata.title}")
         sub_tocs = list()
@@ -358,7 +381,7 @@ class Toc:
                 return False
         return True
 
-    def write_contents(self, output):
+    def write(self, output):
         for item in self.items:
             item.write(output)
 
