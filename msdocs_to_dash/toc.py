@@ -7,6 +7,7 @@ import json
 import os
 import regex
 from pathlib import Path
+from urllib import quote
 from bs4 import BeautifulSoup as bs, Tag
 
 from msdocs_to_dash.sqlite import SqLiteDb, Type
@@ -189,11 +190,19 @@ class Child:
                 self.add_js_uri(f"{self.get_theme_url(link['src'])}")
                 link['href'] = f"/_themes_/{os.path.basename(link['src'])}"
             return soup
-        
+        def insert_dash_toc(soup):
+            rec_type = quote(self.dash_type())
+            name = quote(self.toc_title)
+            attrs = {"name": f"//apple_ref/cpp/{rec_type}/{name}", "class": "dashAnchor"}
+            tag = soup.new_tag(name="a", attrs=attrs)
+            soup.head.insert(0, tag) # this is technically unclosed...?
+            return soup
+
         soup = bs(self.contents, 'html.parser')
         soup = remove_elements(soup)
         soup = fix_relative_links(soup)
         soup = find_extra_files(soup)
+        soup = insert_dash_toc(soup)
         self.contents = soup.prettify("utf-8")
 
     def dash_type(self):

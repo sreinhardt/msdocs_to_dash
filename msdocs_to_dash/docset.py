@@ -200,14 +200,15 @@ class DocSet(DocCommon):
     def make_plist(self, index_path="") -> str:
         index_path = Path(index_path).joinpath("index.html")
         data = {
-            'CFBundleIdentifier':    self.identifier,
-            'CFBundleName':          self.title,
-            'DashDocSetFallbackURL': self.sources[0].get_base_url(),
-            'dashIndexFilePath':     str(index_path),
-            'DashDocSetFamily':      self.identifier,
-            'DocSetPlatformFamily':  self.identifier,
-            'isDashDocset':          True,
-            'isJavaScriptEnabled':   True
+            'CFBundleIdentifier':           self.identifier,
+            'CFBundleName':                 self.title,
+            'DashDocSetFallbackURL':        self.sources[0].get_base_url(),
+            'dashIndexFilePath':            str(index_path),
+            'DashDocSetFamily':             "dashtoc",
+            'DocSetPlatformFamily':         self.identifier,
+            'isDashDocset':                 True,
+            'isJavaScriptEnabled':          True,
+            'DashDocSetDefaultFTSEnabled':  True
 
         }
         return plistlib.dumps(data)
