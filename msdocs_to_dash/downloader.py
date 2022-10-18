@@ -33,5 +33,6 @@ class MsDownloader:
     def build_dash(self):
         logging.info(f"Building dash docset for {self.source.title}")
         self.source.get_contents(self.webdriver, self.output)
+        self.source.get_themes(self.webdriver)
         self.source.make_database(self.output)
         self.source.make_package(self.output)

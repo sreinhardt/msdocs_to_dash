@@ -170,13 +170,19 @@ def adsprop_toc(ad_toc, adsprop_json):
 
 @pytest.fixture
 def html_ok():
-    return "<html>\n <body>\n  exists\n </body>\n</html>"
+    return "<html>\n <head>\n  <link rel=\"stylesheet\" href=\"/test/blah/file.css\"/>\n  </head><body>\n  exists\n </body>\n</html>"
+@pytest.fixture
+def html_ok_rewrite():
+    return "<html>\n <head>\n  <a class=\"dashAnchor\" name=\"//apple_ref/cpp/Category/Active%20Directory%20Domain%20Services\">\n  </a>\n  <link href=\"/_themes_/file.css\" rel=\"stylesheet\"/>\n </head>\n <body>\n  exists\n </body>\n</html>"
 @pytest.fixture
 def bytes_ok():
     return b'png\0'
+@pytest.fixture
+def css_ok():
+    return ".body: 10px;"
 
 @pytest.fixture
-def webserver(root_json, ad_json, adsprop_json, html_ok, bytes_ok):
+def webserver(root_json, ad_json, adsprop_json, html_ok, bytes_ok, css_ok):
     domain = "https://learn.microsoft.com"
     url = f"{domain}/en-us/windows/win32/api"
     theme = f"{domain}/_themes/docs.theme/master/en-us/_themes/styles"
@@ -190,6 +196,8 @@ def webserver(root_json, ad_json, adsprop_json, html_ok, bytes_ok):
         r.add(responses.GET, f'{url}/toc.json', body=root_json)
         r.add(responses.GET, f'{url}/_ad/toc.json', body=ad_json)
         r.add(responses.GET, f'{url}/adsprop/toc.json', body=adsprop_json)
+        # extra css/js
+        r.add(responses.GET, f'{domain}/test/blah/file.css', body=css_ok)
         yield r
 
 @pytest.fixture

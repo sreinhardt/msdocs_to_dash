@@ -35,7 +35,7 @@ class DocCommon:
         return self.documents_path(dir).joinpath("_themes_/")
     def theme_file_path(self, fname, dir=""):
         fname = os.path.basename(fname)
-        return self.theme_path(dir).join_path(f"{fname}.html")
+        return self.theme_path(dir).joinpath(f"{fname}")
         
     def add_css_uri(self, uri):
         uri = uri.strip()
@@ -51,18 +51,21 @@ class DocCommon:
             results = list()
             for url in urls:
                 fname = os.path.basename(url)
+                path = Path(self.theme_path()).joinpath(fname)
                 data = webdriver.get_text(url)
-                results.append((fname, data))
+                results.append((path, data))
             return results
-
         self._css_files = _get_(self._css_files, webdriver)
         self._js_files =  _get_(self._js_files, webdriver)
     def write_contents(self, output):
         # writes to local files
         theme_path = self.theme_path(output)
-        os.makedirs(theme_path)
+        os.makedirs(theme_path, exist_ok=True)
         for data in self._css_files + self._js_files:
-            with open(self.theme_file_path(data[0]), 'w') as f:
+            # data -> (Path(local), css_data)
+            if not isinstance(data, tuple):
+                raise RuntimeError("Did not gather theme files, not a tuple")
+            with open(self.theme_file_path(data[0], output), 'w') as f:
                 f.write(data[1])
 
 @dataclass
@@ -136,8 +139,8 @@ class DocSource(DocCommon):
             idx += 1
 
     def write_contents(self, output):
+        super().write_contents(output)
         self.index.write_index(self.documents_path(output))
-        super().write_contents(self.documents_path(output))
         for toc in self._tocs:
             toc.write(self.documents_path(output))
     
@@ -184,7 +187,6 @@ class DocSet(DocCommon):
     def get_contents(self, webdriver, input):
         for source in self.sources:
             source.get_contents(webdriver, input)
-        self.get_themes(webdriver)
     
     def write_contents(self, output):
         # writes to local files
@@ -222,7 +224,7 @@ class DocSet(DocCommon):
         db.close()
 
     def make_package(self, output):
-        tar_path = Path(output).joinpath(f"{self.title}.tar")
+        tar_path = Path(output).joinpath(f"{self.title}.docset.tar")
         with TarFile.open(str(tar_path), "w:gz") as tar:
             tar_write_bytes(tar, self.ico_path(), self._ico)
             tar_write_bytes(tar, self.plist_path(), self.make_plist())
@@ -240,6 +242,8 @@ class DocSet(DocCommon):
     def get_themes(self, webdriver):
         self._ico = self.get_ico(webdriver)
         super().get_themes(webdriver)
+        for source in self.sources:
+            source.get_themes(webdriver)
     
     def get_ico_url(self, domain="", uri=""):
         if not domain:

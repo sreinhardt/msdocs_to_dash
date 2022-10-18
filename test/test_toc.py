@@ -44,11 +44,11 @@ def test_toc_child_absolute(base_toc, tmp_path):
     assert child.url() == "https://learn.microsoft.com/en-us/windows/win32/api/adsprop/nf-adsprop-adspropcheckifwritable"
     assert child.toc() == None # children dont generate tocs
 
-def test_get_contents(root_toc, webserver, html_ok):
+def test_get_contents(root_toc, webserver, html_ok_rewrite):
     urls = root_toc.get_contents(WebDriver(), "")
     ad_toc = root_toc.items[0].children[0].children[0]
     assert urls == [("windows/win32/api/_ad/", ad_toc)]
-    assert ad_toc.contents == html_ok.encode('utf-8')
+    assert ad_toc.contents == html_ok_rewrite.encode('utf-8')
 
 def test_write(root_toc, webserver, tmp_path):
     urls = root_toc.get_contents(WebDriver(), "")

@@ -7,7 +7,7 @@ import json
 import os
 import regex
 from pathlib import Path
-from urllib import quote
+from urllib.parse import quote
 from bs4 import BeautifulSoup as bs, Tag
 
 from msdocs_to_dash.sqlite import SqLiteDb, Type
@@ -186,16 +186,22 @@ class Child:
             for link in soup.findAll('a',{'rel': 'stylesheet'}):
                 self.add_css_uri(f"{self.get_theme_url(link['href'])}")
                 link['href'] = f"/_themes_/{os.path.basename(link['href'])}"
+            for link in soup.findAll('link',{'rel': 'stylesheet'}):
+                self.add_css_uri(f"{self.get_theme_url(link['href'])}")
+                link['href'] = f"/_themes_/{os.path.basename(link['href'])}"
             for link in soup.findAll('script',{"src":True}):
                 self.add_js_uri(f"{self.get_theme_url(link['src'])}")
-                link['href'] = f"/_themes_/{os.path.basename(link['src'])}"
+                link['src'] = f"/_themes_/{os.path.basename(link['src'])}"
             return soup
         def insert_dash_toc(soup):
-            rec_type = quote(self.dash_type())
-            name = quote(self.toc_title)
+            rec_type = quote(str(self.dash_type()))
+            name = quote(str(self.toc_title))
             attrs = {"name": f"//apple_ref/cpp/{rec_type}/{name}", "class": "dashAnchor"}
             tag = soup.new_tag(name="a", attrs=attrs)
-            soup.head.insert(0, tag) # this is technically unclosed...?
+            if soup.head:
+                soup.head.insert(0, tag) # this is technically unclosed...?
+            else:
+                soup.body.insert(0, tag)
             return soup
 
         soup = bs(self.contents, 'html.parser')
@@ -209,6 +215,7 @@ class Child:
         dtype = Type.from_str(self.toc_title)
         if not dtype:
             return self.parent.dash_type()
+        return dtype
 
     def db_insert(self, db):
         rec_type = self.dash_type()

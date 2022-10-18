@@ -56,6 +56,7 @@ class SqLiteDb():
             logging.debug(f'{name} record exists')
 
 class Type(Enum):
+    # type = [alternative keywords]
     Annotation = auto()
     Attribute = auto()
     Binding = auto()
@@ -91,7 +92,7 @@ class Type(Enum):
     Instruction = auto()
     Interface = auto()
     Keyword = auto()
-    Library = auto()
+    Library = ["Header"]
     Literal = auto()
     Macro = auto()
     Method = auto()
@@ -137,16 +138,30 @@ class Type(Enum):
     
     @staticmethod
     def from_str(text):
+        def search(text, keyword):
+            # regex.search(f"(^|\s){member[0]}s?(\s|$)", text, regex.IGNORECASE)
+            return regex.search(f"(^|\s){keyword}?(\s|$)", text, regex.IGNORECASE)
+        def is_earlier(match, saved) -> bool:
+            if match and match.start() < saved[0]:
+                return True
+            return False
         # MS seems to layer names, such as "callback function"
         # so we need to search for individual words that match names
         # and see which is left-most to the start of the string
-        match = (sys.maxsize,None)
+        saved = (sys.maxsize,None)
         for member in Type.__members__.items(): # (name, variant)
-            # allow icase, plural, and mid/end of line
-            found = regex.search(f"(^|\s){member[0]}s?(\s|$)", text, regex.IGNORECASE)
-            if found and found.start() < match[0]:
-                match = (found.start(), member[1]) # (int, variant)
-        return match[1] # variant or None
+            # allow icase and mid/end of line
+            found = search(text, member[0])
+            if is_earlier(found, saved):
+                saved = (found.start(), member[1]) # (int, variant)
+            if isinstance(member[1].value, list):
+                # Search alt keywords same as 
+                for submember in member[1].value: # [str, str]
+                    found = search(text, submember)
+                    if is_earlier(found, saved):
+                        saved = (found.start(), member[1]) # (int, variant)
+                    
+        return saved[1] if saved[1] else Type.default()
     
     @staticmethod
     def default():
